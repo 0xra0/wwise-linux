@@ -10,6 +10,8 @@ shim-trace.log
 # Build artifacts & temporary directories
 *.o
 *.obj
+*.tar.gz
+*.zip
 shims/*.exe
 !shims/prebuilt/*.exe
 build/tmp/
