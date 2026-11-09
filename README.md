@@ -117,7 +117,7 @@ sudo dnf install wine winetricks mingw64-gcc xdg-utils
 
 Clone the repository:
 ```bash
-git clone https://github.com/0xra/wwise-linux.git
+git clone https://github.com/0xra0/wwise-linux.git
 cd wwise-linux
 ```
 
@@ -294,7 +294,7 @@ Run the built-in diagnostic suite:
 
 ## Contributing
 
-Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](https://github.com/0xra/wwise-linux/issues).
+Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](https://github.com/0xra0/wwise-linux/issues).
 
 ---
 
