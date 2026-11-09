@@ -1,0 +1,284 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Wwise on Linux - Unified CLI Tool
+# ==============================================================================
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export WINEPREFIX="${WINEPREFIX:-${SCRIPT_DIR}/prefix}"
+export WINEARCH="${WINEARCH:-win64}"
+export WINEDEBUG="${WINEDEBUG:--all}"
+
+# Base DLL overrides needed for normal launcher and authoring operation
+DEFAULT_OVERRIDES="powershell.exe=n"
+
+# Helper to locate Wwise Authoring installation
+find_wwise_binary() {
+    local bin_name="$1"
+    local ak_dir="${WINEPREFIX}/drive_c/Audiokinetic"
+    
+    if [ -n "${WWISE_BIN_PATH:-}" ] && [ -f "${WWISE_BIN_PATH}" ]; then
+        echo "${WWISE_BIN_PATH}"
+        return 0
+    fi
+
+    if [ -d "$ak_dir" ]; then
+        # Find latest version installed
+        local found
+        found="$(find "$ak_dir" -maxdepth 8 -type f -name "$bin_name" 2>/dev/null | sort -V | tail -n 1)"
+        if [ -n "$found" ]; then
+            echo "$found"
+            return 0
+        fi
+    fi
+    return 1
+}
+
+find_launcher_exe() {
+    local p1="${WINEPREFIX}/drive_c/Program Files/Wwise Launcher/Wwise Launcher.exe"
+    local p2="${WINEPREFIX}/drive_c/Program Files (x86)/Wwise Launcher/Wwise Launcher.exe"
+    if [ -f "$p1" ]; then echo "$p1"; return 0; fi
+    if [ -f "$p2" ]; then echo "$p2"; return 0; fi
+    return 1
+}
+
+# Subcommands
+cmd_launcher() {
+    local launcher_exe
+    launcher_exe="$(find_launcher_exe)" || {
+        echo "Error: Wwise Launcher not found in prefix: $WINEPREFIX" >&2
+        echo "If you have not installed it yet, run: wwise install-launcher <path-to-AudiokineticLauncher.exe>" >&2
+        exit 1
+    }
+    export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:-$DEFAULT_OVERRIDES}"
+    echo "=== Launching Wwise Launcher ==="
+    echo "WINEPREFIX: $WINEPREFIX"
+    echo "Executable: $launcher_exe"
+    echo "WINEDLLOVERRIDES: $WINEDLLOVERRIDES"
+    exec wine "$launcher_exe" "$@"
+}
+
+cmd_install_launcher() {
+    local installer="${1:-}"
+    if [ -z "$installer" ]; then
+        # Look in common download paths
+        for candidate in \
+            "${HOME}/Downloads"/AudiokineticLauncher*.exe \
+            "/mnt/ssd/Downloads"/AudiokineticLauncher*.exe \
+            "${SCRIPT_DIR}"/AudiokineticLauncher*.exe; do
+            if [ -f "$candidate" ]; then
+                installer="$candidate"
+                break
+            fi
+        done
+    fi
+
+    if [ -z "$installer" ] || [ ! -f "$installer" ]; then
+        echo "Usage: wwise install-launcher <path/to/AudiokineticLauncher-xxxx.exe>" >&2
+        echo "Download the installer from https://www.audiokinetic.com/en/download" >&2
+        exit 1
+    fi
+
+    # During installer execution, native wininet+iertutil pair is scoped to this process
+    export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:-wininet,iertutil=n,b}"
+    echo "=== Running Wwise Launcher Installer ==="
+    echo "WINEPREFIX: $WINEPREFIX"
+    echo "Installer: $installer"
+    echo "WINEDLLOVERRIDES: $WINEDLLOVERRIDES"
+    exec wine "$installer"
+}
+
+cmd_gui() {
+    local wwise_exe
+    wwise_exe="$(find_wwise_binary "Wwise.exe")" || {
+        echo "Error: Wwise.exe not found in prefix: $WINEPREFIX" >&2
+        echo "Install Wwise via Wwise Launcher first ('wwise launcher')." >&2
+        exit 1
+    }
+    export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:-$DEFAULT_OVERRIDES}"
+    echo "=== Launching Wwise Authoring GUI ==="
+    echo "WINEPREFIX: $WINEPREFIX"
+    echo "Executable: $wwise_exe"
+    exec wine "$wwise_exe" "$@"
+}
+
+cmd_console() {
+    local console_exe
+    console_exe="$(find_wwise_binary "WwiseConsole.exe")" || {
+        echo "Error: WwiseConsole.exe not found in prefix: $WINEPREFIX" >&2
+        echo "Install Wwise via Wwise Launcher first ('wwise launcher')." >&2
+        exit 1
+    }
+    export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:-$DEFAULT_OVERRIDES}"
+    exec wine "$console_exe" "$@"
+}
+
+cmd_convert() {
+    local wsources="${1:-}"
+    if [ -z "$wsources" ] || [ ! -f "$wsources" ]; then
+        echo "Usage: wwise convert <path/to/sources.wsources> [additional WwiseConsole flags]" >&2
+        exit 1
+    fi
+    shift
+    local win_wsources
+    win_wsources="$(winepath -w "$wsources" 2>/dev/null || echo "$wsources")"
+    cmd_console convert-external-source "$win_wsources" "$@"
+}
+
+cmd_soundbank() {
+    local wproj="${1:-}"
+    if [ -z "$wproj" ] || [ ! -f "$wproj" ]; then
+        echo "Usage: wwise soundbank <path/to/Project.wproj> [additional WwiseConsole flags]" >&2
+        exit 1
+    fi
+    shift
+    local win_wproj
+    win_wproj="$(winepath -w "$wproj" 2>/dev/null || echo "$wproj")"
+    cmd_console generate-soundbank "$win_wproj" "$@"
+}
+
+cmd_waapi() {
+    local wproj="${1:-}"
+    local win_wproj=""
+    if [ -n "$wproj" ]; then
+        win_wproj="$(winepath -w "$wproj" 2>/dev/null || echo "$wproj")"
+        shift
+        cmd_console waapi-server "$win_wproj" "$@"
+    else
+        cmd_console waapi-server "$@"
+    fi
+}
+
+cmd_url() {
+    local launcher_exe
+    launcher_exe="$(find_launcher_exe)" || {
+        echo "Error: Wwise Launcher not found" >&2
+        exit 1
+    }
+    export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:-$DEFAULT_OVERRIDES}"
+    local log="${SCRIPT_DIR}/url-handler.log"
+    echo "=== $(date -Is) OAuth URL: ${1-<none>}" >> "$log"
+    exec wine "$launcher_exe" "" "${1-}" >> "$log" 2>&1
+}
+
+cmd_test_uri() {
+    local uritest_bin="${SCRIPT_DIR}/shims/uritest.exe"
+    if [ ! -f "$uritest_bin" ]; then
+        uritest_bin="${SCRIPT_DIR}/shims/prebuilt/uritest.exe"
+    fi
+    if [ ! -f "$uritest_bin" ]; then
+        echo "Building uritest.exe..."
+        make -C "${SCRIPT_DIR}/shims" uritest.exe
+        uritest_bin="${SCRIPT_DIR}/shims/uritest.exe"
+    fi
+    echo "Testing CreateUri with builtin urlmon + builtin iertutil (default):"
+    wine "$uritest_bin"
+    echo ""
+    echo "Testing CreateUri with native wininet,iertutil (failure demonstration):"
+    WINEDLLOVERRIDES="wininet,iertutil=n,b" wine "$uritest_bin" || true
+}
+
+cmd_status() {
+    echo "=========================================================="
+    echo " Wwise on Linux - Environment Status"
+    echo "=========================================================="
+    echo "Wine Prefix:      $WINEPREFIX"
+    if [ -d "$WINEPREFIX" ]; then
+        echo "Prefix Status:    EXISTS"
+    else
+        echo "Prefix Status:    MISSING (Run scripts/setup.sh to create)"
+    fi
+    
+    echo -n "Wine Version:     "
+    wine --version 2>/dev/null || echo "NOT FOUND"
+
+    echo -n "Wwise Launcher:   "
+    if find_launcher_exe >/dev/null 2>&1; then
+        echo "INSTALLED ($(find_launcher_exe))"
+    else
+        echo "NOT INSTALLED"
+    fi
+
+    echo -n "Wwise Authoring:  "
+    if find_wwise_binary "Wwise.exe" >/dev/null 2>&1; then
+        echo "INSTALLED ($(find_wwise_binary "Wwise.exe"))"
+    else
+        echo "NOT INSTALLED"
+    fi
+
+    echo -n "WwiseConsole:     "
+    if find_wwise_binary "WwiseConsole.exe" >/dev/null 2>&1; then
+        echo "INSTALLED ($(find_wwise_binary "WwiseConsole.exe"))"
+    else
+        echo "NOT INSTALLED"
+    fi
+
+    echo -n "PowerShell Shim:  "
+    if [ -f "$WINEPREFIX/drive_c/windows/system32/powershell.exe" ]; then
+        echo "INSTALLED in system32"
+    else
+        echo "MISSING"
+    fi
+
+    echo -n "CmdWait Shim:     "
+    if [ -f "$WINEPREFIX/drive_c/windows/cmdwait/cmd.exe" ]; then
+        echo "INSTALLED in cmdwait/cmd.exe"
+    else
+        echo "MISSING"
+    fi
+
+    echo -n "URL Handler MIME: "
+    if command -v xdg-mime >/dev/null 2>&1; then
+        local handler
+        handler="$(xdg-mime query default x-scheme-handler/wwise-launcher 2>/dev/null || echo "none")"
+        echo "$handler"
+    else
+        echo "xdg-mime not installed"
+    fi
+    echo "=========================================================="
+}
+
+cmd_help() {
+    cat <<EOF
+Usage: wwise <command> [arguments...]
+
+Commands:
+  launcher                Launch installed Wwise Launcher
+  install-launcher [exe]  Run Audiokinetic Launcher installer with scoped overrides
+  gui [project.wproj]     Launch Wwise Authoring graphical user interface
+  console <args...>       Execute headless WwiseConsole commands
+  convert <sources.xml>   Batch convert audio files defined in a .wsources file to .wem
+  soundbank <project>     Generate SoundBanks for a project
+  waapi [project.wproj]   Start headless WAAPI (Wwise Authoring API) server
+  url <protocol-url>      Forward wwise-launcher:// OAuth URL to running launcher
+  test-uri                Run URLMon / IertUtil CreateUri linkage verification
+  status                  Show current installation, prefix, and shim status
+  help                    Display this help message
+
+Environment variables:
+  WINEPREFIX              Path to Wine prefix (default: ${SCRIPT_DIR}/prefix)
+  WINEDLLOVERRIDES        Custom DLL overrides (default: powershell.exe=n)
+  WINEDEBUG               Wine debug channels (default: -all)
+  WWISE_BIN_PATH          Explicit path to Wwise.exe or WwiseConsole.exe
+
+EOF
+}
+
+case "${1:-help}" in
+    launcher)           shift; cmd_launcher "$@" ;;
+    install-launcher)   shift; cmd_install_launcher "$@" ;;
+    gui|authoring)      shift; cmd_gui "$@" ;;
+    console|cli)        shift; cmd_console "$@" ;;
+    convert)            shift; cmd_convert "$@" ;;
+    soundbank)          shift; cmd_soundbank "$@" ;;
+    waapi)              shift; cmd_waapi "$@" ;;
+    url)                shift; cmd_url "$@" ;;
+    test-uri)           shift; cmd_test_uri "$@" ;;
+    status)             shift; cmd_status "$@" ;;
+    help|--help|-h)     cmd_help ;;
+    *)
+        echo "Unknown command: $1" >&2
+        cmd_help
+        exit 1
+        ;;
+esac

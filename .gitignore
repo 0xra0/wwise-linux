@@ -1,0 +1,26 @@
+# Wwise Wine Prefix (contains full Windows C: drive, several GBs)
+prefix/
+prefix*/
+
+# Logs and runtime diagnostics
+*.log
+.curlog
+shim-trace.log
+
+# Build artifacts & temporary directories
+*.o
+*.obj
+shims/*.exe
+!shims/prebuilt/*.exe
+build/tmp/
+wemout/
+conv/en-us.wsources
+
+# Editor and OS files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ExternalSourcesList SchemaVersion="1" Root="Z:\mnt\sata\wwise\examples\external_sources">
+  <!-- Conversion can be: "Vorbis Quality High", "ADPCM", "PCM", etc. -->
+  <Source Path="sample.wav" Conversion="Vorbis Quality High" Destination="sample.wem"/>
+</ExternalSourcesList>

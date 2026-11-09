@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Audiokinetic Wwise Launcher
+Comment=Audiokinetic Wwise Launcher on Linux (Wine)
+Exec=/mnt/sata/wwise/bin/wwise launcher %u
+Icon=audio-card
+Terminal=false
+Type=Application
+Categories=Development;AudioVideo;Audio;
+MimeType=x-scheme-handler/wwise-launcher;x-scheme-handler/ak-launcher;x-scheme-handler/ak-bug-reporter;
+StartupWMClass=wwise launcher.exe

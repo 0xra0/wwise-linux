@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Audiokinetic Wwise Authoring
+Comment=Wwise Sound Design & Interactive Audio Tool
+Exec=/mnt/sata/wwise/bin/wwise gui %f
+Icon=audio-card
+Terminal=false
+Type=Application
+Categories=Development;AudioVideo;Audio;
+MimeType=application/x-wwise-project;
+StartupWMClass=wwise.exe

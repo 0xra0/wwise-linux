@@ -1,0 +1,2 @@
+waapi-client>=0.7.0
+websocket-client>=1.6.0
